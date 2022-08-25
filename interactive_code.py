@@ -88,4 +88,105 @@ for i, cls in enumerate(classes):
 
 
 
+# %% DATA PRE - PROCESSING 
+#targets == 1 is 'Normal'
+df_only_normal = final_df[final_df.targets == 1].drop(labels='targets', axis=1)
+df_only_normal.shape
+
+
 # %%
+df_all_anomalies = final_df[final_df.targets != 1].drop(labels='targets', axis=1)
+df_all_anomalies.shape
+# %%
+RANDOM_SEED=42
+train_df, val_df = train_test_split(df_only_normal, test_size=0.15, random_state=RANDOM_SEED)
+
+val_df, test_df = train_test_split(val_df, test_size=0.5, random_state=RANDOM_SEED)
+
+#%%
+train_df.shape
+test_df.shape
+val_df.shape
+# %% Creating dataset
+
+
+
+
+#%% Building LSTM Autoencoder  
+class Encorder(nn.Module):
+    def __init__(self, seq_len, n_features, embedding_dim=64):
+        super(Encorder, self).__init__()
+        self.seq_len, self.n_features = seq_len, n_features
+        self.embedding_dim = embedding_dim
+        self.hidden_dim = 2 * embedding_dim
+
+        self.rnn1 = nn.LSTM(
+            input_size=n_features,
+            hidden_size=self.hidden_dim,
+            num_layers=1
+            batch_first=True
+        ) 
+
+        self.rnn2 = nn.LSTM(
+            input_size=self.hidden_dim,
+            hidden_size=embedding_dim,
+            num_layers=1
+            batch_first=True
+        )
+
+    def forward(self,x):
+        x = x.reshape((1, self.seq_len, self.n_features))
+
+        x, (hidden_n, cell_n) = self.rnn1(x)
+        x, (hidden_n, cell_n) = self.rnn2(x)
+
+        return hidden_n.reshape((1, self.embedding_dim))
+
+
+    
+
+class Dencorder(nn.Module):
+    def __init__(self, seq_len, n_features, embedding_dim=64):
+        super(Dencorder, self).__init__()
+        self.seq_len, self.n_features = seq_len, n_features
+        self.embedding_dim = embedding_dim
+        self.hidden_dim = 2 * embedding_dim
+
+        self.rnn1 = nn.LSTM(
+            input_size=n_features,
+            hidden_size=self.hidden_dim,
+            num_layers=1
+            batch_first=True
+        ) 
+
+        self.rnn2 = nn.LSTM(
+            input_size=self.hidden_dim,
+            hidden_size=embedding_dim,
+            num_layers=1
+            batch_first=True
+        )
+
+    def forward(self,x):
+        x = x.reshape((1, self.seq_len, self.n_features))
+
+        x, (hidden_n, cell_n) = self.rnn1(x)
+        x, (hidden_n, cell_n) = self.rnn2(x)
+
+        return hidden_n.reshape((1, self.embedding_dim))
+
+
+
+
+
+class RAE(nn.Module):
+    def __init__(self, seq_len, n_features, embedding_dim=64):  
+        super(RAE, self).__init__()
+        self.seq_len, self.n_features = seq_len, n_features
+        self.embedding_dim = embedding_dim
+
+        self.encoder = Encorder(seq_len, n_features, embedding_dim).to_device(device)
+        self.decoder = Decorder(seq_len, embedding_dim, n_features).to_device(device)
+
+    def forward(self, x):
+        x = self.encoder(x)
+        x = self.decoder(x)
