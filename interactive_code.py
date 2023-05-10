@@ -15,49 +15,44 @@ import torch.nn.functional as F
 from scipy.io.arff import loadarff 
 
 
-
-rcParams['figure.figsize'] = 12.0, 9.0
-
-# %%
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-#%%
-df_TRAIN = pd.read_csv(r"C:\Users\simon\Desktop\Projects DL\ECG anomalies detection\ECG5000\ECG5000_TRAIN.txt", header = None, delim_whitespace=True)
+
+PATH = '/Users/simon/Desktop/ACHIEVE YOUR FUCKING DREAMS/Projects DL/'
+df_TRAIN = pd.read_csv(f"{PATH}ECG anomalies detection/ECG5000/ECG5000_TRAIN.txt",
+                        header = None, delim_whitespace=True)
 df_TRAIN.head()
+df_TRAIN.shape
 
-
-df_TEST = pd.read_csv(r"C:\Users\simon\Desktop\Projects DL\ECG anomalies detection\ECG5000\ECG5000_TEST.txt", header = None, delim_whitespace=True)
+df_TEST = pd.read_csv(f"{PATH}ECG anomalies detection/ECG5000/ECG5000_TEST.txt",
+                        header = None, delim_whitespace=True)
 df_TEST.head()
 df_TEST.shape
 
 
-# %% concatenating the whole dataframe and checking it has the right lenght (5000x141)
 final_df = pd.concat([df_TRAIN, df_TEST])
-final_df.shape
+final_df.shape  #(5000x141)
 
-#Renaming the target column
+# Renaming the target column
 mapping = {final_df.columns[0]:'targets'}
 final_df = final_df.rename(columns=mapping)
 final_df.head()
 
 
-# %% Shuffling data
-final_df = final_df.sample(frac=1.0)
-final_df.head()
+# %% Shuffling data 
+# PRIMA DI SHUFFLARE I DATI DOVRESTI PIGLIARTI L'HELDOUT SET
+# final_df = final_df.sample(frac=1.0)
+# final_df.head()
 
-#%% Data Exploration
-type(final_df)
+#%% EDA and Data Visualization
 
-#%%
 final_df.targets.value_counts().plot(kind='barh')
 final_df.targets.value_counts()
-#they are imbalanced indeed. WHAT ARE THE LIMITS OF THIS IMBALANCE? WHEN IS IT ACCEPTABLE?
-
 
 
 # %% Let's take a look at the different classes
-def plot_time_series_class(data, class_name, ax, n_steps=10):
+def plot_time_series_single_class(data, class_name, ax, n_steps):
     time_series_df = pd.DataFrame(data)
 
     smooth_path = time_series_df.rolling(n_steps).mean()
@@ -67,7 +62,7 @@ def plot_time_series_class(data, class_name, ax, n_steps=10):
     over_line = (smooth_path + path_deviation)[0]
 
     ax.plot(smooth_path, linewidth=2)
-    ax.fill_between(path_deviation.index, under_line, over_line, alpha=0.125)
+    ax.fill_between(path_deviation.index, under_line, over_line, alpha=0.4)
 
     ax.set_title(class_name)
 
@@ -83,11 +78,10 @@ fig, axs = plt.subplots(
 )
 
 
-for i, cls in enumerate(classes):
+for i, class_ in enumerate(classes):
     ax = axs[i]
-    data = final_df[final_df.targets == cls].drop(labels='targets', axis=1).mean(axis=0).to_numpy()
-    plot_time_series_class(data, class_name[i], ax, n_steps=10)
-
+    avaraged_data = final_df[final_df.targets == class_].drop(labels='targets', axis=1).mean(axis=0).to_numpy()
+    plot_time_series_single_class(avaraged_data, class_name[i], ax, n_steps=10)
 
 
 # %% DATA PRE - PROCESSING 
@@ -101,14 +95,16 @@ df_all_anomalies = final_df[final_df.targets != 1].drop(labels='targets', axis=1
 df_all_anomalies.shape
 # %%
 RANDOM_SEED=42
-train_df, val_df = train_test_split(df_only_normal, test_size=0.15, random_state=RANDOM_SEED)
+train_df, validation_df = train_test_split(df_only_normal, test_size=0.3, random_state=RANDOM_SEED)
+validation_df, test_df = train_test_split(validation_df, test_size=0.5, random_state=RANDOM_SEED)
 
-val_df, test_df = train_test_split(val_df, test_size=0.5, random_state=RANDOM_SEED)
-
+#%% Shuffling
+train_df = train_df.sample(frac=1.0)
+validation_df = validation_df.sample(frac=1.0)
 #%%
 train_df.shape
 test_df.shape
-val_df.shape
+validation_df.shape
 # %% Creating dataset
 
 
@@ -147,7 +143,7 @@ class Encorder(nn.Module):
 
     
 
-class Dencorder(nn.Module):
+class Decoder(nn.Module):
     def __init__(self, seq_len, input_dim=64, output_dim=1):
         super(Dencorder, self).__init__()
         self.seq_len, self.input_dim = seq_len, input_dim
@@ -191,7 +187,7 @@ class RAE(nn.Module):
         self.embedding_dim = embedding_dim
 
         self.encoder = Encorder(seq_len, n_features, embedding_dim).to_device(device)
-        self.decoder = Decorder(seq_len, embedding_dim, n_features).to_device(device)
+        self.decoder = Decoder(seq_len, embedding_dim, n_features).to_device(device)
 
     def forward(self, x):
         x = self.encoder(x)
@@ -211,12 +207,12 @@ def train_model(model, train_dataset, val_dataset, n_epochs):
     criterion = nn.L1loss(reduction='sum').to(device)
     history = dict(train=[], val=[])
 
-    for epoch in range(1, n_epoch + 1):
+    for epoch in range(1, n_epochs + 1):
         model = model.train()
         train_losses = []
 
         for seq_true in train_dataset:
-            opitmizer.zero_grad()
+            optimizer.zero_grad()
             seq_pred = model(seq_true)
 
             loss = criterion(seq_pred, seq_true)
