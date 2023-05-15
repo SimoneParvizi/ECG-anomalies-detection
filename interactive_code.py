@@ -14,12 +14,9 @@ from torch import nn, optim
 import torch.nn.functional as F
 from scipy.io.arff import loadarff 
 
-from Helper import plot_time_series_single_class
-from Helper import Encorder
-from Helper import Decoder
-from Helper import train_model
+from Helper import plot_time_series_single_class, train_model, Encorder, Decoder
 
-
+#%%
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
@@ -157,7 +154,7 @@ class Encorder(nn.Module):
 
         return hidden_n.reshape((1, self.embedding_dim))
 
-
+ 
     
 
 class Decoder(nn.Module):
