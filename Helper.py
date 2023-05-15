@@ -1,7 +1,8 @@
-
+#%%
 import torch
 import numpy as np
 import pandas as pd
+import torch.nn as nn
 
 # For each class taking the smooth and the deviation (2*std)
 def plot_time_series_single_class(data, class_name, ax, n_steps):
@@ -18,8 +19,6 @@ def plot_time_series_single_class(data, class_name, ax, n_steps):
 
     ax.set_title(class_name)
 
-
-
 # Building LSTM Autoencoder  
 class Encorder(nn.Module):
     def __init__(self, seq_len, n_features, embedding_dim=64):
@@ -31,14 +30,14 @@ class Encorder(nn.Module):
         self.rnn1 = nn.LSTM(
             input_size=n_features,
             hidden_size=self.hidden_dim,
-            num_layers=1
+            num_layers=1,
             batch_first=True
         ) 
 
         self.rnn2 = nn.LSTM(
             input_size=self.hidden_dim,
             hidden_size=embedding_dim,
-            num_layers=1
+            num_layers=1,
             batch_first=True
         )
 
@@ -62,14 +61,14 @@ class Decoder(nn.Module):
         self.rnn1 = nn.LSTM(
             input_size=input_dim,
             hidden_size=input_dim,
-            num_layers=1
+            num_layers=1,
             batch_first=True
         ) 
 
         self.rnn2 = nn.LSTM(
             input_size=input_dim,
             hidden_size=self.hidden_dim,
-            num_layers=1
+            num_layers=1,
             batch_first=True
         )
 
@@ -149,3 +148,5 @@ def train_model(model, train_dataset, val_dataset, n_epochs):
     return model.eval(), history
 
 
+
+# %%
