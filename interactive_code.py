@@ -14,6 +14,11 @@ from torch import nn, optim
 import torch.nn.functional as F
 from scipy.io.arff import loadarff 
 
+from Helper import plot_time_series_single_class
+from Helper import Encorder
+from Helper import Decoder
+from Helper import train_model
+
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -107,8 +112,20 @@ test_df.shape
 validation_df.shape
 # %% Creating dataset
 
+def create_dataset(sequences):
+    dataset = [torch.tensor(s).unsqueeze(1) for s in sequences]
 
+    __, sequence_length, number_features = torch.stack(dataset).shape
 
+    return dataset, sequence_length, number_features
+
+#%%
+train_dataset, sequence_length, number_features = create_dataset(train_df.to_numpy())
+validation_dataset, __, __ = create_dataset(validation_df.to_numpy())
+test_normal_dataset, __, __ = create_dataset(test_df.to_numpy())
+test_anomaly_dataset, __, __ = create_dataset(anomaly_sequences.to_numpy())
+
+ 
 
 #%% Building LSTM Autoencoder  
 class Encorder(nn.Module):
