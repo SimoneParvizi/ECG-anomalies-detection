@@ -13,11 +13,11 @@ from sklearn.model_selection import train_test_split
 from torch import nn, optim
 import torch.nn.functional as F
 from scipy.io.arff import loadarff 
-
-from Helper import plot_time_series_single_class, train_model, Encorder, Decoder
+#%%
+from Helper import plot_time_series_single_class, train_model, predict, Encorder, Decoder, RAE
 
 #%%
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cpu')
 
 
 
@@ -52,23 +52,8 @@ final_df.head()
 final_df.targets.value_counts().plot(kind='barh')
 final_df.targets.value_counts()
 
-
-# %% Let's take a look at the different classes
-def plot_time_series_single_class(data, class_name, ax, n_steps):
-    time_series_df = pd.DataFrame(data)
-
-    smooth_path = time_series_df.rolling(n_steps).mean()
-    path_deviation = 2 * time_series_df.rolling(n_steps).std()
-
-    under_line = (smooth_path - path_deviation)[0]
-    over_line = (smooth_path + path_deviation)[0]
-
-    ax.plot(smooth_path, linewidth=2)
-    ax.fill_between(path_deviation.index, under_line, over_line, alpha=0.4)
-
-    ax.set_title(class_name)
-
 #%%
+CLASS_NORMAL = 1.0
 classes = final_df.targets.unique()
 class_name = ['Normal', 'R on T', 'PVC', 'SP', 'UB']
 
@@ -88,175 +73,146 @@ for i, class_ in enumerate(classes):
 
 # %% DATA PRE - PROCESSING 
 #targets == 1 is 'Normal'
-df_only_normal = final_df[final_df.targets == 1].drop(labels='targets', axis=1)
-df_only_normal.shape
 
 
-# %%
-df_all_anomalies = final_df[final_df.targets != 1].drop(labels='targets', axis=1)
-df_all_anomalies.shape
+normal_df = final_df[final_df.targets == CLASS_NORMAL].drop(labels='targets', axis=1)
+normal_df.shape
+     
+
+anomaly_df = final_df[final_df.targets != CLASS_NORMAL].drop(labels='targets', axis=1)
+anomaly_df.shape
+     
+
 # %%
 RANDOM_SEED=42
-train_df, validation_df = train_test_split(df_only_normal, test_size=0.3, random_state=RANDOM_SEED)
-validation_df, test_df = train_test_split(validation_df, test_size=0.5, random_state=RANDOM_SEED)
+train_df, val_df = train_test_split(
+  normal_df,
+  test_size=0.15,
+  random_state=RANDOM_SEED
+)
 
+val_df, test_df = train_test_split(
+  val_df,
+  test_size=0.33, 
+  random_state=RANDOM_SEED
+)
 #%% Shuffling
 train_df = train_df.sample(frac=1.0)
-validation_df = validation_df.sample(frac=1.0)
+val_df = val_df.sample(frac=1.0)
 #%%
 train_df.shape
 test_df.shape
-validation_df.shape
+val_df.shape
 # %% Creating dataset
 
-def create_dataset(sequences):
-    dataset = [torch.tensor(s).unsqueeze(1) for s in sequences]
 
-    __, sequence_length, number_features = torch.stack(dataset).shape
+def create_dataset(df):
 
-    return dataset, sequence_length, number_features
+  sequences = df.astype(np.float32).to_numpy().tolist()
+
+  dataset = [torch.tensor(s).unsqueeze(1).float() for s in sequences]
+
+  n_seq, seq_len, n_features = torch.stack(dataset).shape
+
+  return dataset, seq_len, n_features
+     
+
 
 #%%
-train_dataset, sequence_length, number_features = create_dataset(train_df.to_numpy())
-validation_dataset, __, __ = create_dataset(validation_df.to_numpy())
-test_normal_dataset, __, __ = create_dataset(test_df.to_numpy())
-test_anomaly_dataset, __, __ = create_dataset(anomaly_sequences.to_numpy())
-
- 
-
-#%% Building LSTM Autoencoder  
-class Encorder(nn.Module):
-    def __init__(self, seq_len, n_features, embedding_dim=64):
-        super(Encorder, self).__init__()
-        self.seq_len, self.n_features = seq_len, n_features
-        self.embedding_dim = embedding_dim
-        self.hidden_dim = 2 * embedding_dim
-
-        self.rnn1 = nn.LSTM(
-            input_size=n_features,
-            hidden_size=self.hidden_dim,
-            num_layers=1
-            batch_first=True
-        ) 
-
-        self.rnn2 = nn.LSTM(
-            input_size=self.hidden_dim,
-            hidden_size=embedding_dim,
-            num_layers=1
-            batch_first=True
-        )
-
-    def forward(self,x):
-        x = x.reshape((1, self.seq_len, self.n_features))
-
-        x, (hidden_n, cell_n) = self.rnn1(x)
-        x, (hidden_n, cell_n) = self.rnn2(x)
-
-        return hidden_n.reshape((1, self.embedding_dim))
-
- 
-    
-
-class Decoder(nn.Module):
-    def __init__(self, seq_len, input_dim=64, output_dim=1):
-        super(Dencorder, self).__init__()
-        self.seq_len, self.input_dim = seq_len, input_dim
-        self.hidden_dim, self.output_dim = 2 * input_dim, output_dim
-
-        self.rnn1 = nn.LSTM(
-            input_size=input_dim,
-            hidden_size=input_dim,
-            num_layers=1
-            batch_first=True
-        ) 
-
-        self.rnn2 = nn.LSTM(
-            input_size=input_dim,
-            hidden_size=self.hidden_dim,
-            num_layers=1
-            batch_first=True
-        )
 
 
-        self.dense_layer = nn.Linear(self.hidden_dim, output_dim)
-
-    def forward(self,x):
-        x = x.repeat(self.seq_len, 1)
-        x = x.reshape((1, self.seq_len, self.input_dim))
-
-        x, (hidden_n, cell_n) = self.rnn1(x)
-        x, (hidden_n, cell_n) = self.rnn2(x)
-        x = x.reshape((self.seq_len, self.hidden_dim))
-
-        return self.dense_layer(x)
+train_dataset, seq_len, n_features = create_dataset(train_df)
+val_dataset, _, _ = create_dataset(val_df)
+test_normal_dataset, _, _ = create_dataset(test_df)
+test_anomaly_dataset, _, _ = create_dataset(anomaly_df)
+     
 
 
+     
 
 
-
-class RAE(nn.Module):
-    def __init__(self, seq_len, n_features, embedding_dim=64):  
-        super(RAE, self).__init__()
-        self.seq_len, self.n_features = seq_len, n_features
-        self.embedding_dim = embedding_dim
-
-        self.encoder = Encorder(seq_len, n_features, embedding_dim).to_device(device)
-        self.decoder = Decoder(seq_len, embedding_dim, n_features).to_device(device)
-
-    def forward(self, x):
-        x = self.encoder(x)
-        x = self.decoder(x)
-
-        return x
-
-
-
-model = RAE(seq_len, n_features, embedding_dim=128)
-
+#%%
+model = RAE(seq_len, n_features, 128)
+model = model.to(device)
 
 #%% Training
 
-def train_model(model, train_dataset, val_dataset, n_epochs):
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    criterion = nn.L1loss(reduction='sum').to(device)
-    history = dict(train=[], val=[])
 
-    for epoch in range(1, n_epochs + 1):
-        model = model.train()
-        train_losses = []
+model, history = train_model(
+    model,
+    train_dataset,
+    val_dataset,
+    n_epochs=10
+)
 
-        for seq_true in train_dataset:
-            optimizer.zero_grad()
-            seq_pred = model(seq_true)
+# %% Loss over training epochs
+ax = plt.figure().gca()
 
-            loss = criterion(seq_pred, seq_true)
-            loss.backward()
-            optimizer.step()
+ax.plot(history['train'])
+ax.plot(history['val'])
+plt.ylabel('Loss')
+plt.xlabel('Epoch')
+plt.legend(['train', 'test'])
+plt.title('Loss over training epochs')
+plt.show()
 
-            train_losses.append(loss.item())
+#%%
+# save model
+torch.save(model, 'LSTM.pth')
+
+#%%
+
+_, losses = predict(model, train_dataset)
+
+sns.distplot(losses, bins=50, kde=True)
+#%% Evaluation on normal heartbeats from the test set
+
+predictions, pred_losses = predict(model, test_normal_dataset)
+sns.distplot(pred_losses, bins=50, kde=True)
+     
+
+Threshold = 25
+correct = sum(loss <= Threshold for loss in pred_losses)
+print(f'Correct normal predictions: {correct}/{len(test_normal_dataset)}')
+
+#%% Evaluation on anomalies
+
+anomaly_dataset = test_anomaly_dataset[:len(test_normal_dataset)]
+
+predictions, pred_losses = predict(model, anomaly_dataset)
+sns.distplot(pred_losses, bins=50, kde=True)
 
 
-        val_losses = []
-        model = model.eval()
-        with torch.no_grad():
-            for seq_true in val_dataset:
-                seq_pred = model(seq_true)
+correct = sum(loss <= Threshold for loss in pred_losses)
+print(f'Correct anomaly predictions: {correct}/{len(anomaly_dataset)}')
+     
 
-                loss = criterion(seq_pred, seq_true)
-                val_losses.append(loss.item())
+#%% Looking at the predictions vs the ground truth
 
-        
-        train_loss = np.mean(train_losses)
-        val_loss = np.mean(val_losses)
-        history['train'].append(train_loss)
-        history['val'].append(val_loss)
+def plot_prediction(data, model, title, ax):
+  predictions, pred_losses = predict(model, [data])
 
-        print(f'Epoch {epoch}: train loss {train_loss}, val loss {val_loss}')
-
-    
-    return model.eval(), history
+  ax.plot(data, label='true')
+  ax.plot(predictions[0], label='reconstructed')
+  ax.set_title(f'{title} (loss: {np.around(pred_losses[0], 2)})')
+  ax.legend()    
 
 
 
 
-# %%
+
+fig, axs = plt.subplots(
+  nrows=2,
+  ncols=6,
+  sharey=True,
+  sharex=True,
+  figsize=(22, 8)
+)
+
+for i, data in enumerate(test_normal_dataset[:6]):
+  plot_prediction(data, model, title='Normal', ax=axs[0, i])
+
+for i, data in enumerate(test_anomaly_dataset[:6]):
+  plot_prediction(data, model, title='Anomaly', ax=axs[1, i])
+
+fig.tight_layout()
