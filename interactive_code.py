@@ -1,25 +1,14 @@
 #%%
-from email import header
-from sre_parse import fix_flags
-import torch
-import copy
-import numpy as np
 import pandas as pd
 import seaborn as sns
-from pylab import rcParams
-import matplotlib.pyplot as plt
-from matplotlib import rc
 from sklearn.model_selection import train_test_split
-from torch import nn, optim
-import torch.nn.functional as F
-from scipy.io.arff import loadarff 
-#%%
-from Helper import plot_time_series_single_class, train_model, predict, Encorder, Decoder, RAE
+import matplotlib.pyplot as plt
+import torch
+
+from Helper import *
 
 #%%
 device = torch.device('cpu')
-
-
 
 PATH = '/Users/simon/Desktop/ACHIEVE YOUR FUCKING DREAMS/Projects DL/'
 df_TRAIN = pd.read_csv(f"{PATH}ECG anomalies detection/ECG5000/ECG5000_TRAIN.txt",
@@ -41,11 +30,9 @@ mapping = {final_df.columns[0]:'targets'}
 final_df = final_df.rename(columns=mapping)
 final_df.head()
 
-
-# %% Shuffling data 
-# PRIMA DI SHUFFLARE I DATI DOVRESTI PIGLIARTI L'HELDOUT SET
-# final_df = final_df.sample(frac=1.0)
-# final_df.head()
+#%% Try it again with heldout set
+final_df = final_df.sample(frac=1.0)
+final_df.head()
 
 #%% EDA and Data Visualization
 
@@ -103,39 +90,18 @@ val_df = val_df.sample(frac=1.0)
 train_df.shape
 test_df.shape
 val_df.shape
-# %% Creating dataset
 
-
-def create_dataset(df):
-
-  sequences = df.astype(np.float32).to_numpy().tolist()
-
-  dataset = [torch.tensor(s).unsqueeze(1).float() for s in sequences]
-
-  n_seq, seq_len, n_features = torch.stack(dataset).shape
-
-  return dataset, seq_len, n_features
-     
-
-
-#%%
-
+#%% Datasets
 
 train_dataset, seq_len, n_features = create_dataset(train_df)
 val_dataset, _, _ = create_dataset(val_df)
 test_normal_dataset, _, _ = create_dataset(test_df)
 test_anomaly_dataset, _, _ = create_dataset(anomaly_df)
-     
-
-
-     
 
 
 #%%
 model = RAE(seq_len, n_features, 128)
 model = model.to(device)
-
-#%% Training
 
 
 model, history = train_model(
@@ -156,17 +122,14 @@ plt.legend(['train', 'test'])
 plt.title('Loss over training epochs')
 plt.show()
 
-#%%
-# save model
+#%% Saving the model
 torch.save(model, 'LSTM.pth')
 
-#%%
 
 _, losses = predict(model, train_dataset)
 
 sns.distplot(losses, bins=50, kde=True)
-#%% Evaluation on normal heartbeats from the test set
-
+#%% Evaluation on normal heartbeats (test set)
 predictions, pred_losses = predict(model, test_normal_dataset)
 sns.distplot(pred_losses, bins=50, kde=True)
      
@@ -176,7 +139,6 @@ correct = sum(loss <= Threshold for loss in pred_losses)
 print(f'Correct normal predictions: {correct}/{len(test_normal_dataset)}')
 
 #%% Evaluation on anomalies
-
 anomaly_dataset = test_anomaly_dataset[:len(test_normal_dataset)]
 
 predictions, pred_losses = predict(model, anomaly_dataset)
@@ -187,20 +149,7 @@ correct = sum(loss <= Threshold for loss in pred_losses)
 print(f'Correct anomaly predictions: {correct}/{len(anomaly_dataset)}')
      
 
-#%% Looking at the predictions vs the ground truth
-
-def plot_prediction(data, model, title, ax):
-  predictions, pred_losses = predict(model, [data])
-
-  ax.plot(data, label='true')
-  ax.plot(predictions[0], label='reconstructed')
-  ax.set_title(f'{title} (loss: {np.around(pred_losses[0], 2)})')
-  ax.legend()    
-
-
-
-
-
+#%% Graphs
 fig, axs = plt.subplots(
   nrows=2,
   ncols=6,

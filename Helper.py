@@ -3,6 +3,9 @@ import torch
 import numpy as np
 import pandas as pd
 import torch.nn as nn
+from torch import nn
+import copy
+import numpy as np
 
 # For each class taking the smooth and the deviation (2*std)
 def plot_time_series_single_class(data, class_name, ax, n_steps):
@@ -15,11 +18,31 @@ def plot_time_series_single_class(data, class_name, ax, n_steps):
     over_line = (smooth_path + path_deviation)[0]
 
     ax.plot(smooth_path, linewidth=2)
-    ax.fill_between(path_deviation.index, under_line, over_line, alpha=0.4) #alpha soften the color
+    ax.fill_between(path_deviation.index, under_line, over_line, alpha=0.4) #alpha opacity
 
     ax.set_title(class_name)
 
-# Building LSTM Autoencoder  
+
+def plot_prediction(data, model, title, ax):
+  predictions, pred_losses = predict(model, [data])
+
+  ax.plot(data, label='true')
+  ax.plot(predictions[0], label='reconstructed')
+  ax.set_title(f'{title} (loss: {np.around(pred_losses[0], 2)})')
+  ax.legend()    
+
+
+def create_dataset(df):
+
+  sequences = df.astype(np.float32).to_numpy().tolist()
+
+  dataset = [torch.tensor(s).unsqueeze(1).float() for s in sequences]
+
+  n_seq, seq_len, n_features = torch.stack(dataset).shape
+
+  return dataset, seq_len, n_features
+ 
+
 
 
 class Encoder(nn.Module):
@@ -51,11 +74,7 @@ class Encoder(nn.Module):
     x, (hidden_n, _) = self.rnn2(x)
 
     return hidden_n.reshape((self.n_features, self.embedding_dim))
-     
-
-
-
-    
+       
 
 class Decoder(nn.Module):
 
@@ -92,7 +111,6 @@ class Decoder(nn.Module):
     return self.output_layer(x)
      
 
-
 class RAE(nn.Module):
     def __init__(self, seq_len, n_features, embedding_dim=64):  
         super(RAE, self).__init__()
@@ -108,7 +126,6 @@ class RAE(nn.Module):
         x = self.decoder(x)
 
         return x
-
 
 
 def train_model(model, train_dataset, val_dataset, n_epochs):
@@ -162,8 +179,6 @@ def train_model(model, train_dataset, val_dataset, n_epochs):
   model.load_state_dict(best_model_wts)
   return model.eval(), history
      
-
-
 
 def predict(model, dataset):
   predictions, losses = [], []
