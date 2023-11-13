@@ -32,7 +32,7 @@ The dataset is composed of 5,000 Time Series examples (derived from ECG) which h
 - Unclassified Beat (UB).
 
 ### Average ECG Signal by Class
-![Average ECG Signal by Class](different class_mean.png)
+![Average ECG Signal by Class](different classes_mean.png)
 
 
 ## Model
