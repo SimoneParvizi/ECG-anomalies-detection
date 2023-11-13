@@ -32,7 +32,7 @@ The dataset is composed of 5,000 Time Series examples (derived from ECG) which h
 - Unclassified Beat (UB).
 
 ### Average ECG Signal by Class
-![Average ECG Signal by Class](different classes_mean.png)
+![different classes_mean](https://github.com/SimoneParvizi/ECG-anomalies-detection/assets/75120707/f0bfa165-3741-4183-97f7-3b179fe9a9f8)
 
 
 ## Model
